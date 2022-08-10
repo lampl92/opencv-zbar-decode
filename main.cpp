@@ -12,6 +12,7 @@
 #include <iomanip>
 #include <chrono>
 #include <thread>
+#define WINDOW_DEBUG 1
 int threshold_value = 100;
 int threshold_type = 0;
 int const max_value = 255;
@@ -59,7 +60,8 @@ uint64_t mduration() {
 	return timeSinceEpochMillisec() - last;
 }
 
-#define FRAME_RATE_LIMIT 4
+#define FRAME_RATE_LIMIT 30
+#define CROP_VALUE 100
 int main(int argc, char **argv) {
     last_duration = 0;
     int cam_idx = 0;
@@ -90,14 +92,14 @@ int main(int argc, char **argv) {
     // Configure the reader
     scanner.set_config(ZBAR_QRCODE, ZBAR_CFG_ENABLE, 1);
     int counter = 0;
-    float scale = 1.7;
+    float scale = 1;
     prev_time = timeSinceEpochMillisec();
     for (;;) {
         // Capture an OpenCV frame
-        Mat frame, frame_grayscale, frame_process;
+        Mat raw_frame, frame, frame_grayscale, frame_process;
 	cur_time = timeSinceEpochMillisec();
-	cap.read(frame);
-	if (frame.empty()) {
+	cap.read(raw_frame);
+	if (raw_frame.empty()) {
             cerr << "ERROR! blank frame grabbed\n";
 	    continue;
         }
@@ -107,13 +109,14 @@ int main(int argc, char **argv) {
 	prev_time = timeSinceEpochMillisec();
 	counter++;
 	start_track();
-	resize(frame, frame, Size(), (float) 1/scale, (float) 1/ scale);
+	frame = raw_frame(Range(CROP_VALUE, 480 - CROP_VALUE), Range(CROP_VALUE, 640 - CROP_VALUE));
+	//resize(frame, frame, Size(), (float) 1/scale, (float) 1/ scale);
 	cout << "resize:" << mduration() << endl;
-        // Convert to grayscale
-        cvtColor(frame, frame_grayscale, COLOR_BGR2GRAY);
+    // Convert to grayscale
+    cvtColor(frame, frame_grayscale, COLOR_BGR2GRAY);
 	cout << "cvtColor:" << mduration() << endl;
-	GaussianBlur(frame_grayscale, frame_grayscale, Size(5, 5), 0, 0);
-	cout << "gauss:" << mduration() << endl;
+	//GaussianBlur(frame_grayscale, frame_grayscale, Size(5, 5), 0, 0);
+	//cout << "gauss:" << mduration() << endl;
 	adaptiveThreshold(frame_grayscale, frame_process, threshold_value, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY, 41 ,2 );
 	cout << "adapt:" << mduration() << endl;
         // Obtain image idata
@@ -150,6 +153,11 @@ int main(int argc, char **argv) {
         // Show captured frame, now with overlays!
         // clean up
 	//imwrite(file_path, frame_process);
+#ifdef WINDOW_DEBUG
+		imshow("debug", frame_process);
+		imshow("raw", raw_frame);
+		waitKey(1);
+#endif
         image.set_data(NULL, 0);
     }
 
