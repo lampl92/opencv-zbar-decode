@@ -37,7 +37,7 @@ void getCamInfo(VideoCapture cam) {
     cout<<"CAP_PROP_BRIGHTNESS "<< cam.get(CAP_PROP_BRIGHTNESS) << endl;
     cout<<"CAP_PROP_SATURATION "<< cam.get(CAP_PROP_SATURATION) << endl;
     cout<<"CAP_PROP_HUE "<< cam.get(CAP_PROP_HUE) << endl;
-    cout<<"CAP_PROP_POS_FRAMES "<< cam.get(CAP_PROP_POS_FRAMES) << endl;
+    cout<<"CAP_PROP_BUFFERSIZE "<< cam.get(CAP_PROP_BUFFERSIZE) << endl;
     cout<<"CAP_PROP_FOURCC "<< cam.get(CAP_PROP_FOURCC) << endl;
 
     int ex = static_cast<int>(cam.get(CAP_PROP_FOURCC));     // Get Codec Type- Int form
@@ -45,12 +45,23 @@ void getCamInfo(VideoCapture cam) {
     cout << "Input codec type: " << EXT << endl;
 
 }
-
+uint64_t last_duration;
 uint64_t timeSinceEpochMillisec() {
   return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 }
-#define FRAME_RATE_LIMIT 5
+
+void start_track() {
+     last_duration = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}
+uint64_t mduration() {
+	uint64_t last = last_duration;
+	start_track();
+	return timeSinceEpochMillisec() - last;
+}
+
+#define FRAME_RATE_LIMIT 4
 int main(int argc, char **argv) {
+    last_duration = 0;
     int cam_idx = 0;
     uint64_t prev_time, cur_time;
     char file_path[100];
@@ -69,6 +80,7 @@ int main(int argc, char **argv) {
     
     cap.set(CAP_PROP_FRAME_WIDTH, 640);
     cap.set(CAP_PROP_FRAME_HEIGHT, 480);
+    cap.set(CAP_PROP_BUFFERSIZE, 0);
     cap.set(CAP_PROP_FOURCC, CV_FOURCC('Y', 'U', 'Y', 'V'));
     getCamInfo(cap);
     
@@ -78,7 +90,7 @@ int main(int argc, char **argv) {
     // Configure the reader
     scanner.set_config(ZBAR_QRCODE, ZBAR_CFG_ENABLE, 1);
     int counter = 0;
-    float scale = 2;
+    float scale = 1.7;
     prev_time = timeSinceEpochMillisec();
     for (;;) {
         // Capture an OpenCV frame
@@ -93,16 +105,17 @@ int main(int argc, char **argv) {
 	    continue;
 	}
 	prev_time = timeSinceEpochMillisec();
-	//cout << timeSinceEpochMillisec()  << " : GET FRAME 1" << endl;
 	counter++;
+	start_track();
 	resize(frame, frame, Size(), (float) 1/scale, (float) 1/ scale);
+	cout << "resize:" << mduration() << endl;
         // Convert to grayscale
         cvtColor(frame, frame_grayscale, COLOR_BGR2GRAY);
-	//cout << timeSinceEpochMillisec() << " : 2" << endl;
+	cout << "cvtColor:" << mduration() << endl;
 	GaussianBlur(frame_grayscale, frame_grayscale, Size(5, 5), 0, 0);
-	//cout << timeSinceEpochMillisec() << " : 3" << endl;
+	cout << "gauss:" << mduration() << endl;
 	adaptiveThreshold(frame_grayscale, frame_process, threshold_value, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY, 41 ,2 );
-	//cout << timeSinceEpochMillisec() << " : 4" << endl;
+	cout << "adapt:" << mduration() << endl;
         // Obtain image idata
         int width = frame_process.cols;
         int height = frame_process.rows;
@@ -110,22 +123,19 @@ int main(int argc, char **argv) {
 
         // Wrap image data
         Image image(width, height, "Y800", raw, width * height);
-        //cout << timeSinceEpochMillisec() << " : 5" << endl;
         // Scan the image for barcodes
-        //int n = scanner.scan(image);
         if(scanner.scan(image) == 0) {
-            //cout << timeSinceEpochMillisec() << " : FAILED" << endl;
 	    sprintf(file_path, "/tmp/opencv_%d_fail.jpg", counter);
 	}
+	cout << "decode:" << mduration() << endl;
         // Extract results
         for (Image::SymbolIterator symbol = image.symbol_begin(); symbol != image.symbol_end(); ++symbol) {
             time_t now;
             tm *current;
             now = time(0);
             current = localtime(&now);
-            //cout << timeSinceEpochMillisec() << " : PASS" << endl;
 	    sprintf(file_path, "/tmp/opencv_%d_pass.jpg", counter);
-
+	    cout << "total: " << timeSinceEpochMillisec() - prev_time << " ms"<< endl;
             // do something useful with results
             cout    << "[" << current->tm_hour << ":" << current->tm_min << ":" << setw(2) << setfill('0') << current->tm_sec << "] " << " "
                     << "decoded " << symbol->get_type_name()
@@ -140,7 +150,6 @@ int main(int argc, char **argv) {
         // Show captured frame, now with overlays!
         // clean up
 	//imwrite(file_path, frame_process);
-	cout << "duration: " << timeSinceEpochMillisec() - cur_time << " ms"<< endl;
         image.set_data(NULL, 0);
     }
 
