@@ -29,6 +29,37 @@ using namespace std;
 using namespace cv;
 using namespace zbar;
 
+class Parallel_process : public cv::ParallelLoopBody
+{
+
+private:
+    cv::Mat img;
+    cv::Mat& retVal;
+    int size;
+    int diff;
+
+public:
+    Parallel_process(cv::Mat inputImgage, cv::Mat& outImage,
+                     int sizeVal, int diffVal)
+                : img(inputImgage), retVal(outImage),
+                  size(sizeVal), diff(diffVal){}
+
+    virtual void operator()(const cv::Range& range) const
+    {
+        for(int i = range.start; i < range.end; i++)
+        {
+            /* divide image in 'diff' number
+            of parts and process simultaneously */
+
+            cv::Mat in(img, cv::Rect(0, (img.rows/diff)*i,
+                       img.cols, img.rows/diff));
+            cv::Mat out(retVal, cv::Rect(0, (retVal.rows/diff)*i,
+                                retVal.cols, retVal.rows/diff));
+	    adaptiveThreshold(in, out, threshold_value, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY, 41 ,2 );
+        }
+    }
+};
+
 void getCamInfo(VideoCapture cam) {
     cout<<"CAP_PROP_FRAME_WIDTH " << cam.get(CAP_PROP_FRAME_WIDTH) << endl;
     cout<<"CAP_PROP_FRAME_HEIGHT " << cam.get(CAP_PROP_FRAME_HEIGHT) << endl;
@@ -62,11 +93,11 @@ uint64_t mduration() {
 }
 
 #define FRAME_RATE_LIMIT 10
-#define CROP_VALUE 100
+#define CROP_VALUE 0
 int main(int argc, char **argv) {
     last_duration = 0;
     int cam_idx = 0;
-    int debug = 0;
+    int debug = 1;
     uint64_t prev_time, cur_time;
     char file_path[100];
     if (argc == 2) {
@@ -124,7 +155,8 @@ int main(int argc, char **argv) {
 	GaussianBlur(frame_grayscale, frame_grayscale, Size(5, 5), 0, 0);
 	if(debug)
 	   cout << "gauss:" << mduration() << endl;
-	adaptiveThreshold(frame_grayscale, frame_process, threshold_value, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY, 41 ,2 );
+	//adaptiveThreshold(frame_grayscale, frame_process, threshold_value, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY, 41 ,2 );
+	cv::parallel_for_(cv::Range(0, 4), Parallel_process(frame_grayscale, frame_process, 5, 8));
 	if(debug)
 	   cout << "adapt:" << mduration() << endl;
 #ifdef ZBAR_DECODE
@@ -165,7 +197,7 @@ int main(int argc, char **argv) {
 		if(debug)
 		    cout << "decode:" << mduration() << endl;
 		for(auto& result : results) {
-			cout << "text: " << result.text() << endl;
+			cout << timeSinceEpochMillisec() << "- text: " << result.text() << endl;
 	    		cout << "total: " << timeSinceEpochMillisec() - prev_time << " ms"<< endl;
 		}
 #endif
