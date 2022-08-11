@@ -12,6 +12,7 @@
 #include <iomanip>
 #include <chrono>
 #include <thread>
+#include "ZXingOpenCV.h"
 #define WINDOW_DEBUG 1
 int threshold_value = 100;
 int threshold_type = 0;
@@ -119,7 +120,8 @@ int main(int argc, char **argv) {
 	//cout << "gauss:" << mduration() << endl;
 	adaptiveThreshold(frame_grayscale, frame_process, threshold_value, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY, 41 ,2 );
 	cout << "adapt:" << mduration() << endl;
-        // Obtain image idata
+#ifdef ZBAR_DECODE
+// Obtain image idata
         int width = frame_process.cols;
         int height = frame_process.rows;
         uchar *raw = (uchar *)(frame_process.data);
@@ -149,7 +151,13 @@ int main(int argc, char **argv) {
             line(frame_process, Point(symbol->get_location_x(3), symbol->get_location_y(3)), Point(symbol->get_location_x(0), symbol->get_location_y(0)), Scalar(0, 255, 0), 2, 8, 0);
 
         }
-
+        image.set_data(NULL, 0);
+#else
+		auto results = ReadBarcodes(frame_process);
+		for(auto& result : results) {
+				cout << "text: " << result.text() << endl;
+		}
+#endif
         // Show captured frame, now with overlays!
         // clean up
 	//imwrite(file_path, frame_process);
@@ -158,7 +166,6 @@ int main(int argc, char **argv) {
 		imshow("raw", raw_frame);
 		waitKey(1);
 #endif
-        image.set_data(NULL, 0);
     }
 
     return 0;
