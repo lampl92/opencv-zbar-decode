@@ -13,7 +13,7 @@
 #include <chrono>
 #include <thread>
 #include "ZXingOpenCV.h"
-#define WINDOW_DEBUG 1
+//#define WINDOW_DEBUG 1
 int threshold_value = 100;
 int threshold_type = 0;
 int const max_value = 255;
@@ -61,11 +61,12 @@ uint64_t mduration() {
 	return timeSinceEpochMillisec() - last;
 }
 
-#define FRAME_RATE_LIMIT 30
+#define FRAME_RATE_LIMIT 10
 #define CROP_VALUE 100
 int main(int argc, char **argv) {
     last_duration = 0;
     int cam_idx = 0;
+    int debug = 0;
     uint64_t prev_time, cur_time;
     char file_path[100];
     if (argc == 2) {
@@ -109,17 +110,23 @@ int main(int argc, char **argv) {
 	}
 	prev_time = timeSinceEpochMillisec();
 	counter++;
-	start_track();
+	if(debug)
+	   start_track();
 	frame = raw_frame(Range(CROP_VALUE, 480 - CROP_VALUE), Range(CROP_VALUE, 640 - CROP_VALUE));
 	//resize(frame, frame, Size(), (float) 1/scale, (float) 1/ scale);
-	cout << "resize:" << mduration() << endl;
-    // Convert to grayscale
-    cvtColor(frame, frame_grayscale, COLOR_BGR2GRAY);
-	cout << "cvtColor:" << mduration() << endl;
-	//GaussianBlur(frame_grayscale, frame_grayscale, Size(5, 5), 0, 0);
-	//cout << "gauss:" << mduration() << endl;
+	
+	if(debug)
+	   cout << "resize:" << mduration() << endl;
+    	//Convert to grayscale
+    	cvtColor(frame, frame_grayscale, COLOR_BGR2GRAY);
+	if(debug)
+	   cout << "cvtColor:" << mduration() << endl;
+	GaussianBlur(frame_grayscale, frame_grayscale, Size(5, 5), 0, 0);
+	if(debug)
+	   cout << "gauss:" << mduration() << endl;
 	adaptiveThreshold(frame_grayscale, frame_process, threshold_value, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY, 41 ,2 );
-	cout << "adapt:" << mduration() << endl;
+	if(debug)
+	   cout << "adapt:" << mduration() << endl;
 #ifdef ZBAR_DECODE
 // Obtain image idata
         int width = frame_process.cols;
@@ -132,7 +139,8 @@ int main(int argc, char **argv) {
         if(scanner.scan(image) == 0) {
 	    sprintf(file_path, "/tmp/opencv_%d_fail.jpg", counter);
 	}
-	cout << "decode:" << mduration() << endl;
+	if(debug)
+	   cout << "decode:" << mduration() << endl;
         // Extract results
         for (Image::SymbolIterator symbol = image.symbol_begin(); symbol != image.symbol_end(); ++symbol) {
             time_t now;
@@ -154,8 +162,11 @@ int main(int argc, char **argv) {
         image.set_data(NULL, 0);
 #else
 		auto results = ReadBarcodes(frame_process);
+		if(debug)
+		    cout << "decode:" << mduration() << endl;
 		for(auto& result : results) {
-				cout << "text: " << result.text() << endl;
+			cout << "text: " << result.text() << endl;
+	    		cout << "total: " << timeSinceEpochMillisec() - prev_time << " ms"<< endl;
 		}
 #endif
         // Show captured frame, now with overlays!
